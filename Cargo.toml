@@ -1,8 +1,13 @@
 [package]
 name = "loggathing"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Ramon Huidobro <hola@ramonhuidobro.com>"]
 edition = "2018"
 
 [dependencies]
+mount = "0.4.0"
 iron = "0.6.0"
+juniper = "0.11.1"
+juniper_iron = "0.2.0"
+bson = "0.13.0"
+mongodb = "0.3.12"
