@@ -1,0 +1,7 @@
+[package]
+name = "loggathing"
+version = "0.1.0"
+authors = ["Ramon Huidobro <hola@ramonhuidobro.com>"]
+edition = "2018"
+
+[dependencies]
