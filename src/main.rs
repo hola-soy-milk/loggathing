@@ -1,123 +1,97 @@
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
+
+#[macro_use]
+extern crate serde_derive;
+extern crate serde;
+extern crate serde_json;
+
+#[macro_use]
+extern crate juniper;
+
 #[macro_use(bson, doc)]
 extern crate bson;
 extern crate mongodb;
 
-#[macro_use] extern crate juniper;
-
-use juniper::{FieldResult};
-
-extern crate iron;
-extern crate juniper_iron;
-extern crate mount;
-
-use iron::prelude::*;
-use iron::status;
-
-use mount::Mount;
-use juniper::EmptyMutation;
-use juniper_iron::GraphQLHandler;
+extern crate warp;
 
 use std::sync::Arc;
+use warp::{filters::BoxedFilter, Filter};
 
-#[derive(GraphQLObject)]
-#[graphql(description="Property of a thing")]
-struct Prop {
-    id: String,
-    kind: String,
-    value: String
-}
+mod db;
+mod error;
+mod gql;
+mod models;
 
-#[derive(GraphQLInputObject)]
-#[graphql(description="Property of a thing")]
-struct NewProp {
-    kind: String,
-    value: String
-}
-
-#[derive(GraphQLObject)]
-#[graphql(description="A thing to be logged")]
-struct Thing {
-    id: String,
-    data: Vec<Prop>
-}
-
-// There is also a custom derive for mapping GraphQL input objects.
-
-#[derive(GraphQLInputObject)]
-#[graphql(description="A thing to be logged")]
-struct NewThing {
-    name: String,
-    data: Vec<Prop>
-}
+use db::Db;
+use gql::{Mutations, Query};
 
 #[derive(Clone)]
 pub struct Context {
     pub db: Arc<Db>,
 }
 
-// To make our context usable by Juniper, we have to implement a marker trait.
 impl juniper::Context for Context {}
-
-struct Query;
-
-graphql_object!(Query: Context |&self| {
-
-    field apiVersion() -> &str {
-        "0.0.1"
-    }
-
-    // Arguments to resolvers can either be simple types or input objects.
-    // The executor is a special (optional) argument that allows accessing the context.
-    field thing(&executor, id: String) -> FieldResult<Thing> {
-        // Get the context from the executor.
-        let context = executor.context();
-        // Get a db connection.
-        let connection = context.pool.get_connection()?;
-        // Execute a db query.
-        // Note the use of `?` to propagate errors.
-        let thing = connection.find_thing(&id)?;
-        // Return the result.
-        Ok(thing)
-    }
-});
-
-struct Mutation;
-
-graphql_object!(Mutation: Context |&self| {
-
-    field createThing(&executor, new_thing: NewThing) -> FieldResult<Thing> {
-        let db = executor.context().pool.get_connection()?;
-        let thing: Thing = db.insert_thing(&new_thing)?;
-        Ok(thing)
-    }
-});
-
-type Schema = juniper::RootNode<'static, Query, Mutation>;
-
-fn context_factory(_: &mut Request) -> IronResult<()> {
-    Ok(())
-}
-
-struct Root;
-
-graphql_object!(Root: () |&self| {
-    field foo() -> String {
-        "Bar".to_owned()
-    }
-});
+pub type Schema = juniper::RootNode<'static, Query, Mutations>;
 
 fn main() {
-    let mut mount = Mount::new();
+    let ctx = Context {
+        db: Arc::new(Db::new("mydb")),
+    };
+    let schema = Schema::new(Query, Mutations);
 
-    let graphql_endpoint = GraphQLHandler::new(
-        context_factory,
-        Root,
-        EmptyMutation::<()>::new(),
-    );
+    let gql_index = warp::get2().and(warp::index()).and_then(web_index);
+    let gql_query = make_graphql_filter("query", schema, ctx);
 
-    mount.mount("/graphql", graphql_endpoint);
+    let routes = gql_index.or(gql_query);
+    warp::serve(routes).unstable_pipeline().run(([127, 0, 0, 1], 3030))
+}
 
-    let chain = Chain::new(mount);
+pub fn web_index() -> Result<impl warp::Reply, warp::Rejection> {
+    Ok(warp::http::Response::builder()
+        .header("content-type", "text/html; charset=utf-8")
+        .body(juniper::graphiql::graphiql_source("/query"))
+        .expect("response is valid"))
+}
 
-    Iron::new(chain).http("0.0.0.0:8080").unwrap();
+pub fn make_graphql_filter<Query, Mutation, Context>(
+    path: &'static str,
+    schema: juniper::RootNode<'static, Query, Mutation>,
+    ctx: Context,
+) -> BoxedFilter<(impl warp::Reply,)>
+where
+    Context: juniper::Context + Send + Sync + Clone + 'static,
+    Query: juniper::GraphQLType<Context = Context, TypeInfo = ()> + Send + Sync + 'static,
+    Mutation: juniper::GraphQLType<Context = Context, TypeInfo = ()> + Send + Sync + 'static,
+{
+    let schema = Arc::new(schema);
+
+    let context_extractor = warp::any().map(move || -> Context { ctx.clone() });
+
+    let handle_request =
+        move |context: Context, request: juniper::http::GraphQLRequest| -> Result<Vec<u8>, serde_json::Error> {
+            serde_json::to_vec(&request.execute(&schema, &context))
+        };
+
+    warp::post2()
+        .and(warp::path(path.into()))
+        .and(context_extractor)
+        .and(warp::body::json())
+        .map(handle_request)
+        .map(build_response)
+        .boxed()
+}
+
+fn build_response(response: Result<Vec<u8>, serde_json::Error>) -> warp::http::Response<Vec<u8>> {
+    match response {
+        Ok(body) => warp::http::Response::builder()
+            .header("content-type", "application/json; charset=utf-8")
+            .body(body)
+            .expect("response is valid"),
+        Err(_) => warp::http::Response::builder()
+            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Vec::new())
+            .expect("status code is valid"),
+    }
 }
