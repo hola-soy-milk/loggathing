@@ -7,4 +7,10 @@ pub struct Thing {
 
     #[serde(default)]
     pub name: String,
+
+    #[serde(default)]
+    pub kind: String,
+
+    #[serde(default)]
+    pub value: String,
 }

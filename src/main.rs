@@ -41,7 +41,7 @@ fn main() {
     };
     let schema = Schema::new(Query, Mutations);
 
-    let gql_index = warp::get2().and(warp::index()).and_then(web_index);
+    let gql_index = warp::get2().and(warp::path::end()).and_then(web_index);
     let gql_query = make_graphql_filter("query", schema, ctx);
 
     let routes = gql_index.or(gql_query);
