@@ -18,6 +18,8 @@ extern crate warp;
 
 use std::sync::Arc;
 use warp::{filters::BoxedFilter, Filter};
+use warp::http;
+use std::net::SocketAddrV4;
 
 mod db;
 mod error;
@@ -44,26 +46,40 @@ fn main() {
     let gql_index = warp::get2().and(warp::path::end()).and_then(web_index);
     let gql_query = make_graphql_filter("query", schema, ctx);
 
-    let routes = gql_index.or(gql_query);
+    let routes = warp::options()
+        .and(warp::header::<String>("origin")).map(|origin| {
+            Ok(http::Response::builder()
+               .header("access-control-allow-methods", "HEAD, GET")
+               .header("access-control-allow-headers", "authorization")
+               .header("access-control-allow-credentials", "true")
+               .header("access-control-max-age", "300")
+               .header("access-control-allow-origin", origin)
+               .header("vary", "origin")
+               .body(""))
+        }).or(gql_index).or(gql_query)
+        .with(warp::reply::with::header(
+                "Access-Control-Allow-Headers", "Content-Type, Accept"))
+        .with(warp::reply::with::header(
+"Access-Control-Allow-Origin", "*"));
     warp::serve(routes).unstable_pipeline().run(([127, 0, 0, 1], 3030))
 }
 
 pub fn web_index() -> Result<impl warp::Reply, warp::Rejection> {
     Ok(warp::http::Response::builder()
-        .header("content-type", "text/html; charset=utf-8")
-        .body(juniper::graphiql::graphiql_source("/query"))
-        .expect("response is valid"))
+       .header("content-type", "text/html; charset=utf-8")
+       .body(juniper::graphiql::graphiql_source("/query"))
+       .expect("response is valid"))
 }
 
 pub fn make_graphql_filter<Query, Mutation, Context>(
     path: &'static str,
     schema: juniper::RootNode<'static, Query, Mutation>,
     ctx: Context,
-) -> BoxedFilter<(impl warp::Reply,)>
+    ) -> BoxedFilter<(impl warp::Reply,)>
 where
-    Context: juniper::Context + Send + Sync + Clone + 'static,
-    Query: juniper::GraphQLType<Context = Context, TypeInfo = ()> + Send + Sync + 'static,
-    Mutation: juniper::GraphQLType<Context = Context, TypeInfo = ()> + Send + Sync + 'static,
+Context: juniper::Context + Send + Sync + Clone + 'static,
+Query: juniper::GraphQLType<Context = Context, TypeInfo = ()> + Send + Sync + 'static,
+Mutation: juniper::GraphQLType<Context = Context, TypeInfo = ()> + Send + Sync + 'static,
 {
     let schema = Arc::new(schema);
 
@@ -89,9 +105,9 @@ fn build_response(response: Result<Vec<u8>, serde_json::Error>) -> warp::http::R
             .header("content-type", "application/json; charset=utf-8")
             .body(body)
             .expect("response is valid"),
-        Err(_) => warp::http::Response::builder()
-            .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
-            .body(Vec::new())
-            .expect("status code is valid"),
+            Err(_) => warp::http::Response::builder()
+                .status(warp::http::StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Vec::new())
+                .expect("status code is valid"),
     }
 }
