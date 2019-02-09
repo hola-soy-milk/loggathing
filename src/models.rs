@@ -7,6 +7,15 @@ pub struct Thing {
 
     #[serde(default)]
     pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Prop {
+    #[serde(rename = "_id")]
+    pub id: Option<ObjectId>,
+
+    #[serde(rename = "_id")]
+    pub thing_id: ObjectId,
 
     #[serde(default)]
     pub kind: String,
