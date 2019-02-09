@@ -1,4 +1,5 @@
 use bson::oid::ObjectId;
+use std::clone::Clone;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Thing {
@@ -9,7 +10,7 @@ pub struct Thing {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Prop {
     #[serde(rename = "_id")]
     pub id: Option<ObjectId>,

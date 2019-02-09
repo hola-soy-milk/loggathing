@@ -20,7 +20,8 @@ graphql_object!(Thing: Context |&self| {
     field name() -> &str { self.name.as_str() }
     field props(&executor) -> Vec<Prop> {
         let context = executor.context();
-        context.db.list_props().unwrap().iter().filter(|&p| p.thing_id == self.id.unwrap()).collect().iter().map(|&p| p).collect()
+        let id = self.id.to_owned().unwrap();
+        context.db.list_props().unwrap().iter().filter(|p| p.thing_id == id).cloned().collect()
     }
 });
 
