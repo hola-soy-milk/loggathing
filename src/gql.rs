@@ -10,7 +10,7 @@ pub struct Mutations;
 
 graphql_object!(Prop: Context |&self| {
     field id() -> String { if let Some(ref id) = self.id { id.to_hex() } else { "".into() } }
-    field thing_id() -> String { self.thing_id.to_hex() }
+    field thing_id() -> String { self.thing_id.to_owned() }
     field kind() -> &str { self.kind.as_str() }
     field value() -> &str { self.value.as_str() }
 });
@@ -21,7 +21,7 @@ graphql_object!(Thing: Context |&self| {
     field props(&executor) -> Vec<Prop> {
         let context = executor.context();
         let id = self.id.to_owned().unwrap();
-        context.db.list_props().unwrap().iter().filter(|p| p.thing_id == id).cloned().collect()
+        context.db.list_props().unwrap().iter().filter(|p| p.thing_id == id.to_hex()).cloned().collect()
     }
 });
 
@@ -50,7 +50,6 @@ graphql_object!(Mutations: Context |&self| {
     ) -> FieldResult<Option<Prop>> {
         let context = executor.context();
         let id = id.map(|id| ObjectId::with_string(&id)).map_or(Ok(None), |v| v.map(Some))?;
-        let thing_id = ObjectId::with_string(&thing_id).unwrap();
 
         let prop = Prop {
             id: id,

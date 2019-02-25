@@ -15,8 +15,8 @@ pub struct Prop {
     #[serde(rename = "_id")]
     pub id: Option<ObjectId>,
 
-    #[serde(rename = "_id")]
-    pub thing_id: ObjectId,
+    #[serde(default)]
+    pub thing_id: String,
 
     #[serde(default)]
     pub kind: String,
