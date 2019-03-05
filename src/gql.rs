@@ -1,4 +1,5 @@
 use bson::oid::ObjectId;
+
 use juniper::FieldResult;
 
 use super::Context;
@@ -26,28 +27,28 @@ graphql_object!(Thing: Context |&self| {
 });
 
 graphql_object!(Query: Context |&self| {
-  field apiVersion() -> &str {
-    "1.0"
-  }
+    field apiVersion() -> &str {
+        "1.0"
+    }
 
     field things(&executor) -> FieldResult<Vec<Thing>> {
-    let context = executor.context();
+        let context = executor.context();
         Ok(context.db.list_things()?)
     }
 
-  field thing(&executor, id: String) -> FieldResult<Option<Thing>> {
-    let context = executor.context();
-    Ok(context.db.get_thing(&id)?)
-  }
+    field thing(&executor, id: String) -> FieldResult<Option<Thing>> {
+        let context = executor.context();
+        Ok(context.db.get_thing(&id)?)
+    }
 });
 
 graphql_object!(Mutations: Context |&self| {
     field saveProp(&executor,
-        id: Option<String>,
-        thing_id: String,
-        kind: String,
-        value: String,
-    ) -> FieldResult<Option<Prop>> {
+                   id: Option<String>,
+                   thing_id: String,
+                   kind: String,
+                   value: String,
+                   ) -> FieldResult<Option<Prop>> {
         let context = executor.context();
         let id = id.map(|id| ObjectId::with_string(&id)).map_or(Ok(None), |v| v.map(Some))?;
 
@@ -61,9 +62,9 @@ graphql_object!(Mutations: Context |&self| {
     }
 
     field saveThing(&executor,
-        id: Option<String>,
-        name: String,
-    ) -> FieldResult<Option<Thing>> {
+                    id: Option<String>,
+                    name: String,
+                    ) -> FieldResult<Option<Thing>> {
         let context = executor.context();
         let id = id.map(|id| ObjectId::with_string(&id)).map_or(Ok(None), |v| v.map(Some))?;
 
